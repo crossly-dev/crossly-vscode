@@ -14,8 +14,19 @@
   "bugs": {
     "url": "https://github.com/crossly-dev/crossly-vscode/issues"
   },
-  "keywords": ["crossly", "crosslisting", "automation", "recipe", "json schema", "reseller"],
-  "categories": ["Linters", "Snippets", "Other"],
+  "keywords": [
+    "crossly",
+    "crosslisting",
+    "automation",
+    "recipe",
+    "json schema",
+    "reseller"
+  ],
+  "categories": [
+    "Linters",
+    "Snippets",
+    "Other"
+  ],
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -43,8 +54,14 @@
       }
     ],
     "snippets": [
-      { "language": "json", "path": "./snippets/crossly-recipes.code-snippets" },
-      { "language": "jsonc", "path": "./snippets/crossly-recipes.code-snippets" }
+      {
+        "language": "json",
+        "path": "./snippets/crossly-recipes.code-snippets"
+      },
+      {
+        "language": "jsonc",
+        "path": "./snippets/crossly-recipes.code-snippets"
+      }
     ],
     "commands": [
       {
@@ -60,7 +77,10 @@
     ],
     "menus": {
       "commandPalette": [
-        { "command": "crossly.validateRecipe", "when": "editorLangId == json || editorLangId == jsonc" }
+        {
+          "command": "crossly.validateRecipe",
+          "when": "editorLangId == json || editorLangId == jsonc"
+        }
       ]
     },
     "configuration": {
@@ -75,7 +95,7 @@
     }
   },
   "scripts": {
-    "test": "node --test test/unit/",
+    "test": "node --test test/unit/*.test.js",
     "test:integration": "node test/run-integration.js",
     "snippets": "node scripts/gen-snippets.js",
     "package": "vsce package"

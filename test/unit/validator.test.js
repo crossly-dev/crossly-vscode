@@ -145,8 +145,12 @@ test('every recipe in crossly-dev/crossly-recipes', { skip: !(RECIPES_DIR && fs.
   assert.ok(n > 0);
 });
 
-test('the bundled schema matches the live one', { skip: process.env.ONLINE !== '1' && 'set ONLINE=1' }, async () => {
+test('the bundled schema matches the live one', { skip: process.env.ONLINE !== '1' && 'set ONLINE=1' }, async (t) => {
   const res = await fetch(SCHEMA_URL);
-  assert.equal(res.status, 200);
+  if (res.status !== 200) {
+    console.log(`::warning::${SCHEMA_URL} answered HTTP ${res.status}; the extension keeps working from its bundled copy`);
+    t.skip(`live schema unavailable (HTTP ${res.status})`);
+    return;
+  }
   assert.deepEqual(await res.json(), schema, 'schemas/automation-recipe-v1.json is stale: copy the live schema in');
 });
