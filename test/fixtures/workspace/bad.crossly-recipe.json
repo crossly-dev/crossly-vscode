@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "name": "Typo in the trigger",
+  "trigger": { "type": "listing.sol" },
+  "action": { "type": "inbox.send_thank_you" },
+  "enabled": true
+}

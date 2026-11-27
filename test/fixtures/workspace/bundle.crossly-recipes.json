@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "recipes": [
+    {
+      "schemaVersion": 1,
+      "name": "Thank buyers after a sale",
+      "trigger": { "type": "listing.sold" },
+      "action": { "type": "inbox.send_thank_you" }
+    },
+    {
+      "schemaVersion": 1,
+      "name": "",
+      "trigger": { "type": "listing.sold" },
+      "action": { "type": "inbox.send_thank_you" }
+    }
+  ]
+}

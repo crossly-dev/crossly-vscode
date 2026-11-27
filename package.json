@@ -1,0 +1,93 @@
+{
+  "name": "crossly",
+  "displayName": "Crossly",
+  "description": "Crossly automation recipes in VS Code: schema validation, \"did you mean\" diagnostics, hover docs for every trigger, condition and action, and snippets.",
+  "version": "0.1.0",
+  "publisher": "crossly",
+  "license": "MIT",
+  "icon": "icon.png",
+  "homepage": "https://github.com/crossly-dev/crossly-vscode#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/crossly-dev/crossly-vscode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/crossly-dev/crossly-vscode/issues"
+  },
+  "keywords": ["crossly", "crosslisting", "automation", "recipe", "json schema", "reseller"],
+  "categories": ["Linters", "Snippets", "Other"],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "main": "./src/extension.js",
+  "activationEvents": [
+    "onLanguage:json",
+    "onLanguage:jsonc"
+  ],
+  "contributes": {
+    "jsonValidation": [
+      {
+        "fileMatch": [
+          "*.crossly-recipe.json",
+          "**/crossly-recipes/recipes/**/*.json",
+          "!**/crossly-recipes/recipes/all.json"
+        ],
+        "url": "./schemas/automation-recipe-v1.json"
+      },
+      {
+        "fileMatch": [
+          "*.crossly-recipes.json",
+          "**/crossly-recipes/recipes/all.json"
+        ],
+        "url": "./schemas/automation-recipe-bundle-v1.json"
+      }
+    ],
+    "snippets": [
+      { "language": "json", "path": "./snippets/crossly-recipes.code-snippets" },
+      { "language": "jsonc", "path": "./snippets/crossly-recipes.code-snippets" }
+    ],
+    "commands": [
+      {
+        "command": "crossly.validateRecipe",
+        "title": "Validate Recipe",
+        "category": "Crossly"
+      },
+      {
+        "command": "crossly.openSchema",
+        "title": "Open the Recipe Schema",
+        "category": "Crossly"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        { "command": "crossly.validateRecipe", "when": "editorLangId == json || editorLangId == jsonc" }
+      ]
+    },
+    "configuration": {
+      "title": "Crossly",
+      "properties": {
+        "crossly.validateOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Validate Crossly recipe files (*.crossly-recipe.json, *.crossly-recipes.json, crossly-recipes/recipes/**, or any JSON whose $schema is the recipe schema) when they are opened or saved."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node --test test/unit/",
+    "test:integration": "node test/run-integration.js",
+    "snippets": "node scripts/gen-snippets.js",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1"
+  },
+  "devDependencies": {
+    "@vscode/test-electron": "^2.4.1",
+    "@vscode/vsce": "^3.2.1",
+    "ajv": "^8.17.1",
+    "mocha": "^10.8.2",
+    "ovsx": "^0.10.1"
+  }
+}

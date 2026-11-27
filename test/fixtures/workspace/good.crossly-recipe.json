@@ -1,0 +1,7 @@
+{
+  "$schema": "https://crossly.net/schemas/automation-recipe-v1.json",
+  "schemaVersion": 1,
+  "name": "Thank buyers after a sale",
+  "trigger": { "type": "listing.sold" },
+  "action": { "type": "inbox.send_thank_you" }
+}

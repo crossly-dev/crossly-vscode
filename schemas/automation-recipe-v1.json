@@ -1,0 +1,2378 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://crossly.net/schemas/automation-recipe-v1.json",
+  "title": "Crossly automation recipe",
+  "description": "One automation rule, portable between Crossly accounts. Import via Automations → Import or `crossly automation import-recipes`. Imported rules arrive PAUSED.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "description": {
+      "type": "string"
+    },
+    "trigger": {
+      "description": "What starts the rule.",
+      "oneOf": [
+        {
+          "title": "On a cron schedule",
+          "description": "Fire the rule on a cron expression (e.g. `0 9 * * *` for daily at 9 AM in the user-specified timezone).",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "schedule.cron"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "cron": {
+                  "type": "string",
+                  "description": "Standard 5-field cron expression."
+                },
+                "timezone": {
+                  "type": "string",
+                  "description": "IANA timezone (default \"America/New_York\")."
+                }
+              },
+              "required": [
+                "cron"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Daily at a specific UTC hour",
+          "description": "Convenience trigger — equivalent to `schedule.cron` with `0 <hourUtc> * * *`.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "schedule.daily"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "hourUtc": {
+                  "type": "integer",
+                  "description": "0–23 — the UTC hour to fire."
+                }
+              },
+              "required": [
+                "hourUtc"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Every N minutes",
+          "description": "Fire repeatedly at a fixed interval. Minimum 15 minutes.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "schedule.interval"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "intervalMinutes": {
+                  "type": "integer",
+                  "description": "Minutes between runs. ≥15."
+                }
+              },
+              "required": [
+                "intervalMinutes"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Between two timestamps (start + end)",
+          "description": "Fires once when entering the time window (at `startsAt`) and again when exiting (at `endsAt`). Use to model \"active between X and Y\" — pairs with `listing.timed_discount` for sitewide-discount campaigns.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "schedule.window"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "startsAt": {
+                  "type": "string",
+                  "description": "ISO datetime — when the window opens."
+                },
+                "endsAt": {
+                  "type": "string",
+                  "description": "ISO datetime — when the window closes."
+                }
+              },
+              "required": [
+                "startsAt",
+                "endsAt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "When a listing is created",
+          "description": "Fires the moment a new listing publishes on any platform.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.created"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "When a listing sells",
+          "description": "Fires when a sale is detected — useful for thank-you messages, restock prompts, etc.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.sold"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "When a buyer likes a listing",
+          "description": "Poshmark-style — fires on each new like. Detection path: the extension stats-sync endpoint (/api/ext/stats-sync) and the API-platform stats poller (Etsy num_favorers) compare the prior favorites count against the incoming one and fire this trigger when it increases. Payload includes newLikesCount + totalLikes. Use with `listing.send_offer_to_likers`.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.liked"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter (mostly poshmark, depop, etsy)."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "When a buyer comments on a listing",
+          "description": "Fires on new comments. Detection path: the extension stats-sync endpoint reads each listing's commentsCount on its poll cycle and posts it through /api/ext/stats-sync; the route compares against the stored count and fires this trigger on positive deltas. Pair with `inbox.send_message` for auto-replies. Platforms whose extension module doesn't collect commentsCount won't fire this — coverage is tracked in platform-recipes/coverage.ts.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.commented"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "When a buyer sends an offer",
+          "description": "Fires for offers from both sources: ones that arrive as a chat message (conversations ingest) and ones the offers poller pulls from the platform's own offers API. Pair with `inbox.offer_auto_respond` for hands-off accept/decline/counter on net payout across every platform whose adapter can answer. `inbox.auto_decline_low_offer` and `inbox.counter_offer` only see the message-borne ones — they need a conversation.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "inbox.offer_received"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "When an eBay Best Offer arrives",
+          "description": "Polls eBay's Sell Negotiation API for incoming Best Offers. Pair with `inbox.ebay_best_offer_auto_respond` for hands-off accept/decline/counter on listings with Best Offer enabled.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "inbox.ebay_offer_received"
+            },
+            "config": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "When another platform drops the price",
+          "description": "Fires when the same item is repriced elsewhere — useful for keeping prices in sync.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.price_dropped"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter for source platform."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "When a listing crosses an age threshold",
+          "description": "Fires once the first time a listing crosses `ageDays`.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.age_reached"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "ageDays": {
+                  "type": "integer",
+                  "description": "Age in days at which to fire."
+                }
+              },
+              "required": [
+                "ageDays"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Listing has no views after N days",
+          "description": "For listings older than `ageDays` with views ≤ `maxViews`.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.no_views_after"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "ageDays": {
+                  "type": "integer",
+                  "description": "Age threshold in days."
+                },
+                "maxViews": {
+                  "type": "integer",
+                  "description": "View count to consider \"no views\"."
+                }
+              },
+              "required": [
+                "ageDays",
+                "maxViews"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "When a listing metric crosses a threshold",
+          "description": "General-purpose metric watcher — fires when (views/favorites/days_listed/price) crosses `value` under `operator`. Stats are populated by per-platform pollers: cookie platforms via the cookie-sales poller, eBay via the Sell Analytics traffic_report (last 7 days), Etsy via the per-listing Stats API. Shopify has no per-product views in its public Admin API so Shopify listings stay at 0 views — use days_listed for time-based Shopify rules.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.metric_threshold"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "metric": {
+                  "type": "string",
+                  "description": "One of 'views' | 'favorites' | 'days_listed' | 'price'."
+                },
+                "operator": {
+                  "type": "string",
+                  "description": "One of 'gt' | 'lt' | 'gte' | 'lte' | 'eq'."
+                },
+                "value": {
+                  "type": "number",
+                  "description": "Threshold value."
+                },
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                }
+              },
+              "required": [
+                "metric",
+                "operator",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "When an order ships",
+          "description": "Fires the moment tracking is submitted to a marketplace. Pair with `inbox.send_message` for a \"your order shipped\" note, or with `crm.push_buyer` to land the customer in HubSpot the moment they become a confirmed buyer.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "order.shipped"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "When an order is due to ship within 24h",
+          "description": "Fires once when an unshipped order's ship-by deadline (the buyer's chosen service / listing handling time) is under 24h away. Pair with `notify.slack` or a reminder so nothing ships late.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "order.ship_by_soon"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "When an order is past its ship-by date",
+          "description": "Fires once when an unshipped order blows its ship-by deadline. Pair with an escalation (Slack/email) or an auto-buy-label action to recover fast and protect your seller metrics.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "order.ship_by_overdue"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "When an order is delivered",
+          "description": "Fires when the carrier marks the package delivered. Pair with `inbox.send_message` for a review request, or with `notify.slack` to alert your team.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "order.delivered"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "When a buyer opens a dispute",
+          "description": "Fires when a buyer opens a payment dispute / case on the platform (auto-detected — eBay payment disputes today). Pair with `notify.slack` to alert your team instantly or with a canned response so you never miss the dispute-response window.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "order.disputed"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "When an order is returned",
+          "description": "Fires on return-detected. Reactivates the listing automatically — use for \"thank you for returning\" messages or for syncing the refund into accounting.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "order.returned"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "When an order is refunded",
+          "description": "Fires on refund-issued. Distinct from `order.returned` — a refund can happen without a return (partial / store credit). Pair with `notify.discord` to flag.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "order.refunded"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "When an order is cancelled",
+          "description": "Fires when a seller- or buyer-initiated cancellation removes the order. Use to relist automatically or send a \"sorry, would you like a similar item?\" message.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "order.cancelled"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Order unshipped after N days",
+          "description": "Watcher — fires when an order has been paid but unshipped for at least `daysOverdue`. Useful for late-shipment alerts and customer comms.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "order.unshipped_after"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "daysOverdue": {
+                  "type": "integer",
+                  "description": "Days since order placed without shipping label."
+                },
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                }
+              },
+              "required": [
+                "daysOverdue"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Inventory drops below a threshold",
+          "description": "Fires when an item's `quantityAvailable` drops to or below `threshold`. Pair with `notify.slack` for restock alerts.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "inventory.low_stock"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "threshold": {
+                  "type": "integer",
+                  "description": "Quantity threshold (default 1)."
+                }
+              },
+              "required": [
+                "threshold"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "A return is restocked",
+          "description": "Fires when a return is marked restocked and its quantity goes back on the item. Targets the item's most recent linked listing, so pair with `listing.expand_platforms` to republish it automatically, or `notify.slack`.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "inventory.restocked"
+            },
+            "config": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Item is fully sold out",
+          "description": "Fires when `quantityAvailable` reaches 0. Pair with the restock-prompts banner or with `listing.delist` for sellouts you don't restock.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "inventory.zero_qty"
+            },
+            "config": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "When a buyer sends a message",
+          "description": "Generic message-received trigger (any platform, any thread). Use with `condition` + AI intent classification for spam routing, FAQ auto-replies, etc.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "inbox.message_received"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                },
+                "intent": {
+                  "type": "string",
+                  "description": "Optional classified intent: 'question' | 'offer' | 'spam' | 'shipping_question' — fires only on matching intent."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "When a competitor undercuts your price",
+          "description": "Fires when the cheapest active listing for the same item drops below ours by `minDeltaPercent` (default 5%). Backs auto-match-lowest pricing strategies.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "market.competitor_underprice"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "minDeltaPercent": {
+                  "type": "number",
+                  "description": "Required gap before firing. Default 5."
+                },
+                "platforms": {
+                  "type": "array",
+                  "description": "Source platforms to scan."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "When a platform disconnects (cookies expire)",
+          "description": "Fires the moment a platform_connection transitions to `cookies_invalid` / `disconnected`. Pair with `notify.slack` so you reconnect before sales stop syncing.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "platform.disconnected"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "condition": {
+      "description": "Optional filter. Without one, the rule runs on everything the trigger matches.",
+      "oneOf": [
+        {
+          "title": "Listing is on a specific platform",
+          "description": "Matches only listings on the named platforms.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.platform"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Platform IDs."
+                }
+              },
+              "required": [
+                "platforms"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Listing price is in a range",
+          "description": "Inclusive min/max bounds — either is optional.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.price_range"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "minPrice": {
+                  "type": "number",
+                  "description": "Inclusive lower bound."
+                },
+                "maxPrice": {
+                  "type": "number",
+                  "description": "Inclusive upper bound."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Listing price is above",
+          "description": "Convenience — equivalent to `listing.price_range` with only minPrice.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.price_above"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "threshold": {
+                  "type": "number",
+                  "description": "Threshold in USD."
+                }
+              },
+              "required": [
+                "threshold"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Listing price is below",
+          "description": "Convenience — equivalent to `listing.price_range` with only maxPrice.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.price_below"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "threshold": {
+                  "type": "number",
+                  "description": "Threshold in USD."
+                }
+              },
+              "required": [
+                "threshold"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Listing age is in a range",
+          "description": "Match listings whose listed-days falls in [min, max].",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.age_range"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "minDays": {
+                  "type": "integer",
+                  "description": "Inclusive lower bound in days."
+                },
+                "maxDays": {
+                  "type": "integer",
+                  "description": "Inclusive upper bound in days."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Listing has tags",
+          "description": "Match listings whose `tags` contains the specified tags. `matchAll` defaults to false (any-of).",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.has_tags"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "tags": {
+                  "type": "array",
+                  "description": "Tag names to match."
+                },
+                "matchAll": {
+                  "type": "boolean",
+                  "description": "Require ALL tags (default: any)."
+                }
+              },
+              "required": [
+                "tags"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Listing has label",
+          "description": "Match listings with the named inventory label.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.has_label"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "description": "Label name."
+                }
+              },
+              "required": [
+                "label"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "action": {
+      "description": "What the rule does.",
+      "oneOf": [
+        {
+          "title": "Lower the listing price",
+          "description": "Reduce price by a percent OR by a fixed amount, optionally clamped to a floor. Pushes the update to every connected platform via dispatchUpdate.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.price_drop"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "description": "'percent' or 'fixed'. Defaults to 'percent'."
+                },
+                "percent": {
+                  "type": "number",
+                  "description": "Percent to reduce (5–90). Required when mode=percent."
+                },
+                "fixedAmount": {
+                  "type": "number",
+                  "description": "USD amount to subtract. Required when mode=fixed."
+                },
+                "floor": {
+                  "type": "number",
+                  "description": "Absolute price floor — never drop below this."
+                },
+                "minDaysListed": {
+                  "type": "integer",
+                  "description": "Only apply to listings older than N days."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Reprice against the market",
+          "description": "Market-reactive repricing across every connected platform. strategy picks the behaviour: undercut_lowest beats the cheapest comparable listing; match_market prices at a percentage of the median; scheduled_decay steps down each time the rule fires; raise_back climbs again once the seller who undercut you is gone; sold_median drops the price to what the SAME catalog product actually sold for across Crossly (median by default, or p10 / p25 / p75 / p90 via percentile) and never raises it. Pair sold_median with listing.age_reached for \"if it is still unsold after 30 days, drop it to the sold median\". Pair the others with schedule.interval for a steady repricer, or with market.competitor_underprice to react the moment you are beaten. Holds rather than guesses when there are too few comparable sales; sold_median also holds when the listing is not linked to a catalog product (no market_sku_id) — it never matches on titles. Never goes below the floor: an item-level floor beats this rule floor, and with floorIsNet the floor is a TAKE-HOME target converted to a different list price on every platform. Every decision, including deciding NOT to move, is recorded with its reason.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.reprice"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "strategy": {
+                  "type": "string",
+                  "description": "undercut_lowest | match_market | scheduled_decay | raise_back | sold_median",
+                  "enum": [
+                    "undercut_lowest",
+                    "match_market",
+                    "scheduled_decay",
+                    "raise_back",
+                    "sold_median"
+                  ]
+                },
+                "percentile": {
+                  "type": "string",
+                  "description": "sold_median: which sold price to drop to — p10 | p25 | median | p75 | p90. Default median. p10 and p90 need 10+ sales.",
+                  "enum": [
+                    "p10",
+                    "p25",
+                    "median",
+                    "p75",
+                    "p90"
+                  ]
+                },
+                "undercutByCents": {
+                  "type": "integer",
+                  "description": "undercut_lowest: beat the cheapest comp by this many cents."
+                },
+                "undercutByPct": {
+                  "type": "number",
+                  "description": "undercut_lowest: or by this percentage of it."
+                },
+                "percentOfMedian": {
+                  "type": "number",
+                  "description": "match_market: percentage of the median. 100 = match it."
+                },
+                "decayPct": {
+                  "type": "number",
+                  "description": "scheduled_decay: percentage to drop each run."
+                },
+                "raisePct": {
+                  "type": "number",
+                  "description": "raise_back: percentage to climb, never past the cheapest comp."
+                },
+                "minSampleSize": {
+                  "type": "integer",
+                  "description": "Hold below this many comps. Default 2 — one comp is an anecdote. sold_median: default and minimum 3 sales from 2+ sellers (the privacy floor)."
+                },
+                "minChangeCents": {
+                  "type": "integer",
+                  "description": "Ignore moves smaller than this. Default 25c, to stop churn."
+                },
+                "floorCents": {
+                  "type": "integer",
+                  "description": "Rule-level floor. An item-level floor overrides it."
+                },
+                "floorIsNet": {
+                  "type": "boolean",
+                  "description": "Treat the floor as take-home, converted per platform."
+                },
+                "ceilingCents": {
+                  "type": "integer",
+                  "description": "Never price above this."
+                },
+                "requireApproval": {
+                  "type": "boolean",
+                  "description": "Propose instead of apply: each change waits for your Apply / Skip (push, Telegram /reprices, the reprice log, API)."
+                },
+                "bands": {
+                  "type": "array",
+                  "description": "Per-price-band parameter overrides, cheapest band wins."
+                },
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                }
+              },
+              "required": [
+                "strategy"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Timed sitewide discount (snapshot → apply → revert)",
+          "description": "Pair with `schedule.window`. At the window start, snapshots every matching listing's current price and dispatches an update at `(price * (1 - percentOff/100))`. At the window end, reverts each platform_listing back to its snapshot. The snapshot is persisted in the rule's `actionConfig.snapshotPrices` jsonb so reverts survive worker restarts.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.timed_discount"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "percentOff": {
+                  "type": "number",
+                  "description": "Percent off (1-90)."
+                },
+                "startsAt": {
+                  "type": "string",
+                  "description": "ISO datetime when discount applies."
+                },
+                "endsAt": {
+                  "type": "string",
+                  "description": "ISO datetime when discount reverts."
+                },
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                }
+              },
+              "required": [
+                "percentOff",
+                "startsAt",
+                "endsAt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Share your closet (Poshmark)",
+          "description": "Self-share every active listing on a Poshmark closet. Respects rate limits.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.share_closet"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "maxItems": {
+                  "type": "integer",
+                  "description": "Max listings to share per run (1–500). Default 50."
+                },
+                "delayMs": {
+                  "type": "integer",
+                  "description": "Delay between shares in ms (500–30000). Default 3000."
+                },
+                "order": {
+                  "type": "string",
+                  "description": "'newest' | 'oldest' | 'random'. Default 'newest'."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Share to a Posh Party / community",
+          "description": "Submit listings to the matching Posh Party.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.community_share"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "count": {
+                  "type": "integer",
+                  "description": "Number of listings to share (1–200). Default 30."
+                },
+                "targetParties": {
+                  "type": "array",
+                  "description": "Specific party names to target. Empty = auto-pick."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Share a single listing",
+          "description": "Call the platform-specific share action — Poshmark closet share, Mercari boost, etc. — for one listing.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.share"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Platform IDs to share on. Empty = all eligible."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Send offer to likers",
+          "description": "Poshmark-style — private offer to everyone who liked the listing.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.send_offer_to_likers"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "discountPercent": {
+                  "type": "number",
+                  "description": "Percent discount (5–90)."
+                },
+                "shippingFree": {
+                  "type": "boolean",
+                  "description": "Comp shipping? Default false."
+                },
+                "minLikeCount": {
+                  "type": "integer",
+                  "description": "Only fire when likes ≥ N. Default 1."
+                },
+                "excludeRecentOfferDays": {
+                  "type": "integer",
+                  "description": "Skip likers offered in last N days. Default 7."
+                }
+              },
+              "required": [
+                "discountPercent"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "eBay: send Best Offer to interested buyers",
+          "description": "eBay's equivalent of \"send offer to likers\" — pulls the seller's eligible-for-offer listings via findEligibleBestOfferListings, builds a discounted price per listing using either discountPercent or discountFixedCents (whichever you pass), and submits the batch via sendBestOfferToInterestedBuyers. Cap the run via maxListingsPerRun (default 50). durationHours sets the offer expiry (1-48); allowCounterOffer defaults to true. minEligibleBuyerCount filters out listings with too-few watchers (default 1). Single-listing runs work too — leave maxListingsPerRun unset.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.ebay_send_offer_to_interested_buyers"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "discountPercent": {
+                  "type": "number",
+                  "description": "Percent off original price (1–50). Use this OR discountFixedCents."
+                },
+                "discountFixedCents": {
+                  "type": "integer",
+                  "description": "Fixed dollar discount in cents. Use this OR discountPercent."
+                },
+                "maxListingsPerRun": {
+                  "type": "integer",
+                  "description": "Cap listings per fire. Default 50."
+                },
+                "durationHours": {
+                  "type": "integer",
+                  "description": "Offer expiry in hours (1-48). Default 24."
+                },
+                "allowCounterOffer": {
+                  "type": "boolean",
+                  "description": "Let buyer counter the offer. Default true."
+                },
+                "minEligibleBuyerCount": {
+                  "type": "integer",
+                  "description": "Skip listings with fewer watchers than this. Default 1."
+                },
+                "message": {
+                  "type": "string",
+                  "description": "Optional 250-char message attached to every offer."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Auto-relist (delist + republish to refresh)",
+          "description": "Most platforms boost newly-published listings — relist when stale.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.auto_relist"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Platforms to refresh. Empty = all currently-live."
+                },
+                "minDaysListed": {
+                  "type": "integer",
+                  "description": "Only relist listings older than N days. Default 30."
+                },
+                "copyPhotos": {
+                  "type": "boolean",
+                  "description": "Re-upload photos. Default true."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Delist the listing",
+          "description": "Remove the listing from every platform it is live on.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.delist"
+            },
+            "config": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Cross-post to more platforms",
+          "description": "For listings live on fewer platforms than `targetPlatforms`, queue crossposts to fill the gap.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.expand_platforms"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "targetPlatforms": {
+                  "type": "array",
+                  "description": "Platforms the listing should be on."
+                }
+              },
+              "required": [
+                "targetPlatforms"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Send a templated message",
+          "description": "Send a message on the matched conversation. Supports `{{buyerName}}` / `{{listingTitle}}` / `{{price}}` / `{{platform}}`.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "inbox.send_message"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "template": {
+                  "type": "string",
+                  "description": "Message body. Supports placeholders."
+                }
+              },
+              "required": [
+                "template"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Send a post-sale thank-you",
+          "description": "When paired with the `listing.sold` trigger, sends a configurable thank-you note to the buyer.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "inbox.send_thank_you"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "template": {
+                  "type": "string",
+                  "description": "Thank-you message body."
+                }
+              },
+              "required": [
+                "template"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Auto-decline offers below threshold",
+          "description": "When a buyer offer arrives IN A CONVERSATION below `minAcceptablePercent`, decline (optionally counter). Set `useNetPayout` to measure the percentage on take-home instead of sticker price — a gross percentage means something different on every platform. Left off by default so existing rules keep their current behaviour. For offers that arrive through the offers API rather than a chat thread, use `inbox.offer_auto_respond`, which covers every platform and is net-aware by default.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "inbox.auto_decline_low_offer"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "minAcceptablePercent": {
+                  "type": "number",
+                  "description": "Percent of asking below which to decline."
+                },
+                "counterAmount": {
+                  "type": "number",
+                  "description": "Optional counter amount."
+                },
+                "useNetPayout": {
+                  "type": "boolean",
+                  "description": "Measure the percentage on net take-home after fees and any platform label, rather than sticker price. Default false."
+                }
+              },
+              "required": [
+                "minAcceptablePercent"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "eBay Best Offer auto-respond",
+          "description": "When an eBay Best Offer comes in, accept above `acceptAbove`, decline below `declineBelow`, and (optionally) counter at `counter` in the gap. Calls the Sell Negotiation API directly — no extension hop. Pair with the `inbox.ebay_offer_received` trigger; the worker polls eBay's incoming-offers endpoint each tick.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "inbox.ebay_best_offer_auto_respond"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "acceptAbove": {
+                  "type": "number",
+                  "description": "Auto-accept offers >= this USD amount."
+                },
+                "declineBelow": {
+                  "type": "number",
+                  "description": "Auto-decline offers <= this USD amount."
+                },
+                "counter": {
+                  "type": "number",
+                  "description": "Optional counter amount in USD for offers between the two thresholds. If omitted, in-between offers are left pending."
+                }
+              },
+              "required": [
+                "acceptAbove",
+                "declineBelow"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Auto-respond to offers (any platform, on net payout)",
+          "description": "Answers offers that arrive through the offers poller, on every platform whose adapter can respond — not just eBay. Thresholds are percentages of what FULL PRICE would yield on that platform, and by default they are measured on net take-home, so one rule means the same thing everywhere: a 90% offer on Poshmark (20% fee + label) nets less than a 78% offer on Depop, and a gross rule gets that backwards. `floorCents` is a hard minimum on the same basis and outranks the percentages. Pair with the `inbox.offer_received` trigger. Platforms that can read offers but not answer them (Mercari) are skipped with a stated reason rather than silently.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "inbox.offer_auto_respond"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "basis": {
+                  "type": "string",
+                  "description": "'net' (default — take-home after fees and any platform label) or 'gross' (sticker price)."
+                },
+                "acceptAtOrAbovePercent": {
+                  "type": "number",
+                  "description": "Accept at or above this percentage of what full price would yield."
+                },
+                "declineBelowPercent": {
+                  "type": "number",
+                  "description": "Decline strictly below this percentage."
+                },
+                "counterStrategy": {
+                  "type": "string",
+                  "description": "What to do in the gap: 'split' (halfway between the offer and your accept line), 'fixed_percent' (use counterPercent), or 'none' (leave it for you)."
+                },
+                "counterPercent": {
+                  "type": "number",
+                  "description": "Percentage of full price to counter at when counterStrategy = \"fixed_percent\"."
+                },
+                "floorCents": {
+                  "type": "integer",
+                  "description": "Hard minimum in cents, on the chosen basis. Never accepted below this whatever the percentages say."
+                }
+              },
+              "required": [
+                "acceptAtOrAbovePercent",
+                "declineBelowPercent"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Auto-counter offers in messages (eBay + Poshmark)",
+          "description": "Buyer-message offer handler. When an offer arrives in a conversation, accept above `acceptAbove`, decline below `declineBelow`, otherwise counter via `counterFormula` (split = halfway between offer and acceptAbove, fixed = use counterFixed). Poshmark uses the structured respondToOffer API; eBay sends a short text reply via the Sell Messaging API (formal Best Offers go through `inbox.ebay_best_offer_auto_respond` instead). Mercari pending a HAR capture.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "inbox.counter_offer"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "acceptAbove": {
+                  "type": "number",
+                  "description": "Auto-accept offers >= this USD amount."
+                },
+                "declineBelow": {
+                  "type": "number",
+                  "description": "Auto-decline offers <= this USD amount."
+                },
+                "counterFormula": {
+                  "type": "string",
+                  "description": "'split' (halfway between offer and acceptAbove) or 'fixed' (use counterFixed)."
+                },
+                "counterFixed": {
+                  "type": "number",
+                  "description": "Counter amount in USD when counterFormula = \"fixed\"."
+                }
+              },
+              "required": [
+                "acceptAbove",
+                "declineBelow",
+                "counterFormula"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Follow back new followers",
+          "description": "Poshmark / Depop / Mercari social — auto-follow anyone who follows you.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "social.follow_back"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Platform IDs. Empty = all that support social."
+                },
+                "maxPerRun": {
+                  "type": "integer",
+                  "description": "Cap per execution. Default 50."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Follow users who post a brand (Poshmark)",
+          "description": "Cron-triggered. Searches Poshmark for the configured brand name, then follows up to `maxFollowsPerRun` users we have not already followed (tracked in `social_follows`). Pair with `schedule.cron`. Depop / Grailed / Mercari support pending user-search recipe captures.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "social.brand_follow_proactive"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "brand": {
+                  "type": "string",
+                  "description": "Brand name to search for."
+                },
+                "platform": {
+                  "type": "string",
+                  "description": "Currently only \"poshmark\" is wired."
+                },
+                "maxFollowsPerRun": {
+                  "type": "integer",
+                  "description": "Hard cap on follows per execution. Required."
+                }
+              },
+              "required": [
+                "brand",
+                "platform",
+                "maxFollowsPerRun"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Toggle vacation mode on / off",
+          "description": "Set vacation/away/holiday mode across the listed platforms. Pair with `schedule.window` to auto-pause Fri-Sun, with `schedule.daily` for nightly pauses, or with `listing.metric_threshold` to step out when daily sales spike. Platform coverage: Poshmark, Mercari, Depop, Grailed, Vinted, Whatnot, Vestiaire, Etsy, eBay, Reverb, Bonanza, BigCommerce, Wix.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "account.toggle_vacation"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Platform ids. Empty = every platform with vacation support that's connected."
+                },
+                "enabled": {
+                  "type": "boolean",
+                  "description": "true = enter vacation, false = exit vacation."
+                },
+                "message": {
+                  "type": "string",
+                  "description": "Optional away message shown to buyers (used where the platform supports it)."
+                }
+              },
+              "required": [
+                "enabled"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Auto-archive AI-flagged scam threads",
+          "description": "When paired with `inbox.offer_received` or `inbox.message_received`, archives any conversation whose latest buyer message scored ≥ `scamScoreThreshold` on the triage classifier (default 70). No reply is sent, no exposure to the scam playbook.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "inbox.archive_scam"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "scamScoreThreshold": {
+                  "type": "integer",
+                  "description": "AI scam-score cutoff (0-100). Default 70."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Send a saved canned response",
+          "description": "Sends one of the saved canned-response templates (Settings → Inbox → Canned). Use to auto-reply to FAQ-style buyer questions detected by the triage classifier (intent=\"question\" or \"shipping_question\").",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "inbox.send_canned"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "cannedId": {
+                  "type": "string",
+                  "description": "Canned-response id to send."
+                }
+              },
+              "required": [
+                "cannedId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Archive stale listings",
+          "description": "Find listings older than `olderThanDays` whose total platform views are below `viewsBelow`, delist them from every active platform, and mark `status=archived`. Pairs with `schedule.cron` for a monthly cleanup.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.archive_stale"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "olderThanDays": {
+                  "type": "integer",
+                  "description": "Minimum listing age in days."
+                },
+                "viewsBelow": {
+                  "type": "integer",
+                  "description": "Maximum total views to qualify as stale. Default 5."
+                },
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter — archive only when listed on these."
+                }
+              },
+              "required": [
+                "olderThanDays"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Raise the listing price",
+          "description": "Bump price by a percent OR a fixed amount, optionally clamped to a ceiling. Mirror of `listing.price_drop`. Useful for tiered post-sale pricing or auto-recovery after a discount window expires.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.price_raise"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "description": "'percent' or 'fixed'. Default 'percent'."
+                },
+                "percent": {
+                  "type": "number",
+                  "description": "Percent to raise (1–500). Required when mode=percent."
+                },
+                "fixedAmount": {
+                  "type": "number",
+                  "description": "USD amount to add. Required when mode=fixed."
+                },
+                "ceiling": {
+                  "type": "number",
+                  "description": "Absolute price ceiling — never raise above this."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Update a listing field",
+          "description": "Set a single field (title, description, condition, brand, size, color, category, etc.) across every matched listing. Cross-platform — dispatches updates to every platform that supports the field.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.update_field"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "description": "Field name. One of 'title' | 'description' | 'condition' | 'brand' | 'size' | 'color' | 'category'."
+                },
+                "value": {
+                  "type": "string",
+                  "description": "New value (templated — supports `{{listingTitle}}` etc)."
+                }
+              },
+              "required": [
+                "field",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Add a tag to the listing",
+          "description": "Append a tag to the listing's tags array. Use with `inventory.label` / `listing.has_tags` condition to chain workflows.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.add_tag"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "tag": {
+                  "type": "string",
+                  "description": "Tag name to add."
+                }
+              },
+              "required": [
+                "tag"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Remove a tag from the listing",
+          "description": "Remove a tag from the listing's tags array. No-op if the tag isn't present.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.remove_tag"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "tag": {
+                  "type": "string",
+                  "description": "Tag name to remove."
+                }
+              },
+              "required": [
+                "tag"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Apply a bundle discount banner",
+          "description": "Set a \"Bundle 2+ for 15% off\" style promo header on the listing. Currently Poshmark closet bundle discount + Mercari shop coupon; falls back to a header tag elsewhere.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.bundle_promo"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "itemsRequired": {
+                  "type": "integer",
+                  "description": "Minimum items to trigger discount. Default 2."
+                },
+                "percentOff": {
+                  "type": "number",
+                  "description": "Percent off the bundle. Default 10."
+                }
+              },
+              "required": [
+                "itemsRequired",
+                "percentOff"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Sync price to the lowest active platform",
+          "description": "Look at every active platform_listing for the listing. Find the lowest current platform price, then sync all the others down to match, never going below this rule's `floor`. Useful for auto-balancing after a manual platform-side edit. Note this compares YOUR OWN platform prices, not the market's.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.sync_price_to_lowest"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "floor": {
+                  "type": "number",
+                  "description": "Absolute price floor — never sync below this."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Cancel the order",
+          "description": "Cancel an unshipped order on the originating platform. Pair with `order.unshipped_after` for \"auto-cancel stale orders older than 14 days\" workflows. Cancels on the marketplace itself on: eBay, Shopify, Etsy, WooCommerce, BigCommerce, Wix Stores, Walmart Marketplace, Amazon, TikTok Shop, OfferUp, Poshmark, Mercari, Cardmarket, Kaufland, GoDaddy, eBid, CardNexus, Alias (GOAT & Stadium Goods), OnBuy, Crossly. Etsy cancels by refunding in full (Etsy has no separate cancel). On any other platform the order is cancelled in Crossly only and you cancel it on the marketplace yourself.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "order.cancel"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "reason": {
+                  "type": "string",
+                  "description": "Cancellation reason code (platform-specific). Empty = the marketplace default, and the item goes back to Available. A reason meaning out of stock (e.g. eBay OUT_OF_STOCK_OR_CANNOT_FULFILL) also removes the unit from your stock."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Follow the buyer post-sale",
+          "description": "After a sale, follow the buyer's profile on the originating platform. Pair with the `listing.sold` trigger for a no-touch follow that prompts repeat buys.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "social.follow_buyer"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "platforms": {
+                  "type": "array",
+                  "description": "Platforms to follow on. Empty = the platform the sale came from."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Push buyer to CRM",
+          "description": "Send the buyer associated with this listing/sale to one of the configured CRM integrations (HubSpot, Salesforce, Pipedrive, Zoho, or a custom webhook). Pair with `listing.sold` / `order.shipped` for hands-off CRM ingestion.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "crm.push_buyer"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "integrationId": {
+                  "type": "string",
+                  "description": "crm_integrations.id to dispatch through."
+                }
+              },
+              "required": [
+                "integrationId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Send a Slack message",
+          "description": "Post a templated message to a Slack channel via an incoming-webhook integration (Settings → Add-ons → Slack). Supports `{{listingTitle}}`, `{{price}}`, `{{buyerName}}`, `{{platform}}`, `{{saleAmount}}`.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "notify.slack"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "integrationId": {
+                  "type": "string",
+                  "description": "notification_integrations.id (provider=slack)."
+                },
+                "template": {
+                  "type": "string",
+                  "description": "Message body. Supports placeholders."
+                }
+              },
+              "required": [
+                "integrationId",
+                "template"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Send a Discord message",
+          "description": "Post a templated message to a Discord channel via an incoming-webhook integration (Settings → Add-ons → Discord). Same placeholders as notify.slack.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "notify.discord"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "integrationId": {
+                  "type": "string",
+                  "description": "notification_integrations.id (provider=discord)."
+                },
+                "template": {
+                  "type": "string",
+                  "description": "Message body. Supports placeholders."
+                }
+              },
+              "required": [
+                "integrationId",
+                "template"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Send a Telegram message",
+          "description": "Message the seller's linked Telegram chat. Same placeholders as notify.slack. Takes no integrationId — a seller has exactly one linked chat, established by sending a one-time code to the bot (Settings → Add-ons → Telegram). Fails with a stated reason if no chat is linked, rather than silently doing nothing.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "notify.telegram"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "template": {
+                  "type": "string",
+                  "description": "Message body. Supports placeholders."
+                }
+              },
+              "required": [
+                "template"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "POST to a custom webhook",
+          "description": "POST a JSON payload to any URL. Signed with optional HMAC (set in the integration config). Use for hooking into Zapier, Make, n8n, or your own backend.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "notify.webhook"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "integrationId": {
+                  "type": "string",
+                  "description": "notification_integrations.id (provider=webhook)."
+                },
+                "template": {
+                  "type": "string",
+                  "description": "JSON body template. Supports placeholders."
+                }
+              },
+              "required": [
+                "integrationId",
+                "template"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Like back people who liked your listing",
+          "description": "For a triggering listing, fetch the recent likers via getListingLikers and like one of their listings back. Engagement reciprocity — OneShop parity. Dedupes via the same `social_follows`-style log so we never double-engage the same user inside the configured window.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.like_for_like"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "maxPerListing": {
+                  "type": "integer",
+                  "description": "Max likers to engage per fire (1–25). Default 5."
+                },
+                "cooldownDays": {
+                  "type": "integer",
+                  "description": "Skip likers we already engaged in N days. Default 14."
+                },
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Share listings of people who shared yours",
+          "description": "Share a recent listing from anyone who shared yours back. Poshmark-first — uses shareListing recipe to put one of their items into your followers' feed. Reciprocal-share community pattern.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "listing.share_for_share"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "maxPerRun": {
+                  "type": "integer",
+                  "description": "Cap per execution. Default 20."
+                },
+                "cooldownDays": {
+                  "type": "integer",
+                  "description": "Skip sharers we already shared in N days. Default 7."
+                },
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter (mostly poshmark today)."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Share pool — promote other Crossly sellers",
+          "description": "Opt-in network engagement. When fired, pick N other pool members and share one of their active listings on the same platform from your account. Reciprocal — other members do the same for you. Sellers join via Settings → Network. Logged to network_engagement_history.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "network.share_pool"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "maxSharesPerRun": {
+                  "type": "integer",
+                  "description": "Members to engage per fire (1–50). Default 10."
+                },
+                "platforms": {
+                  "type": "array",
+                  "description": "Platforms to share on. Empty = all where the seller is connected."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Follow pool — connect with other Crossly sellers",
+          "description": "Pick N other Crossly Network members and follow them on shared platforms. Reciprocal follows compound a seller's reach inside the Crossly ecosystem.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "network.follow_pool"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "maxFollowsPerRun": {
+                  "type": "integer",
+                  "description": "Members to follow per fire (1–50). Default 10."
+                },
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Like pool — heart other Crossly sellers' listings",
+          "description": "Like recent listings from N pool members per fire. Like reciprocity boosts visibility in algorithmic feeds (Poshmark especially).",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "network.like_pool"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "maxLikesPerRun": {
+                  "type": "integer",
+                  "description": "Likes per execution (1–100). Default 20."
+                },
+                "platforms": {
+                  "type": "array",
+                  "description": "Optional platform filter."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "Email yourself",
+          "description": "Send an email to your account email address (transactional). Use for \"alert me when X\" workflows where you don't want a Slack/Discord channel.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "notify.email_user"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "subject": {
+                  "type": "string",
+                  "description": "Email subject line. Supports placeholders."
+                },
+                "body": {
+                  "type": "string",
+                  "description": "Email body (plain text). Supports placeholders."
+                }
+              },
+              "required": [
+                "subject",
+                "body"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "platforms": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Optional platform filter for the whole rule."
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "name",
+    "trigger",
+    "action"
+  ],
+  "additionalProperties": false
+}

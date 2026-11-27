@@ -1,0 +1,38 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 6 * * 1' # weekly: catches drift between the bundled and the live recipe schema
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Snippets match the schema
+        run: node scripts/gen-snippets.js --check
+      - name: Fetch the public recipe corpus
+        run: git clone --depth 1 https://github.com/crossly-dev/crossly-recipes recipes-corpus || echo "crossly-recipes not reachable; that test is skipped"
+      - name: Unit tests (validator vs Ajv, hover, diagnostics, snippets, manifest) + live schema check
+        run: npm test
+        env:
+          ONLINE: '1'
+          RECIPES_DIR: recipes-corpus
+      - name: Extension tests in VS Code (@vscode/test-electron under xvfb)
+        run: xvfb-run -a npm run test:integration
+      - name: Package
+        run: npx vsce package --out crossly.vsix
+      - name: Show what is in the package
+        run: unzip -l crossly.vsix
+      - uses: actions/upload-artifact@v7
+        with:
+          name: vsix
+          path: crossly.vsix

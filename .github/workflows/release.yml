@@ -1,0 +1,53 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Tag matches package.json
+        run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+      - run: npm install --no-audit --no-fund
+      - run: node scripts/gen-snippets.js --check
+      - run: npm test
+      - run: xvfb-run -a npm run test:integration
+      - name: Package
+        run: |
+          mkdir -p dist
+          npx vsce package --out "dist/crossly-${GITHUB_REF_NAME#v}.vsix"
+          (cd dist && sha256sum *.vsix > SHA256SUMS)
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/*.vsix
+      - uses: actions/upload-artifact@v7
+        with:
+          name: vsix
+          path: dist/
+      # Publishing is opt-in: set the repository variable PUBLISH_VSCE to 'true' once the
+      # "crossly" publisher (Visual Studio Marketplace) and namespace (Open VSX) exist and the
+      # VSCE_PAT and OVSX_PAT secrets are set.
+      - name: Publish to the Visual Studio Marketplace
+        if: vars.PUBLISH_VSCE == 'true'
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx vsce publish --packagePath dist/*.vsix
+      - name: Publish to Open VSX
+        if: vars.PUBLISH_VSCE == 'true'
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: npx ovsx publish dist/*.vsix
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes=$(awk -v h="## [${GITHUB_REF_NAME#v}]" 'index($0, h) == 1 {f=1; next} /^## / && f {exit} f' CHANGELOG.md)
+          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes "${notes:-See CHANGELOG.md}" --verify-tag

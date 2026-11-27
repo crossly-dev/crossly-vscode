@@ -1,0 +1,10 @@
+.github/**
+.vscode-test/**
+test/**
+scripts/**
+dist/**
+recipes-corpus/**
+**/*.vsix
+.gitattributes
+.gitignore
+package-lock.json
